@@ -1,0 +1,99 @@
+Microsoft recently released a New Dialogue Ranking Pretrained Transformers model. Some human replies are more engaging than others, spawning more followup interactions. Since we want our conversational models to be more interactive we need some metric to know which comment is more likely to engage the user. So authors of DialogRPT trained it on 133M pairs of human feedback data to address this issue and the resulting ranker outperformed several baselines. If you are not interested in paper summary directly jump to the code.
+
+Why do we need such a pretrained transformer model?
+
+Human-like conversations are perhaps one of the most difficult challenges of AI. Now with more recent advancements in the field some times human annotators cannot reliably distinguish between human- and machine-generated responses.
+
+However human responses are not limited to be just relevant to the context. Sometimes they are interesting enough to prompt a rich listener reaction. (Although conversation can be sometimes very boring, heated, funny and awkward🤭).On the other side Chatbots or Conv-AI models just to prevent them from creating inappropriate comments often end up being vague, not engaging.
+
+GIF via Giphy
+
+A successful dialog turn must be proactive, engaging, and consistent with social norms.
+
+The solutions that authors proposed is using existing human feedback data (e.g., number of replies and likes) from online social communities(here Reddit). While there has been work on feedback prediction, this is the first time it has been applied to a dialogue and response generation system.
+
+Fig 1. Example of an engaging Dialogue. Courtesy: DialogRPT
+
+Let's dive deep on how the model solves the issue of engaging comments.
+
+Posts and comments typically form a tree structure. Each comment has its own number of replies and upvotes (refer Fig 1. Upvotes also termed as “Likes” in some social communities). These can be used as engagingness labels after careful normalization and formulation. Using a dataset of 133M pairs of human comments and their associated number of replies or up-/downvotes, authors train a set of large-scale transformer-based feedback ranking models which outperform several baselines.
+
+Understanding feedback metrics
+
+Posts and comments typically form a tree structure. Consider parent node as context c and the reply to it as r. For each dialogue (c, r), we consider the following feedback: Width, the number of direct replies to r; Depth, the maximum length of the dialogue after this turn; and Updown, the number of upvotes minus the number of downvotes.
+
+The feedback metrics defined above cannot be directly used as a measure of reply engagingness. Studies show that while popularity, measured by Updown, generally increases with quality, posts of similar quality can exhibit very different upvote counts.
+
+Tasks
+
+Given a context and a list of responses, the task of predicting a ranking based on the feedback they received, as measured by these three separate metrics: (1) Width, (2) Depth, and (3) Updown. Along with this an additional task (4)human-vs-fake, which measures how human-like the response is.
+
+Problem Formulation and Training objective
+
+Contrastive learning approach was used while training the model for the task.
+
+A Contrastive Learning approach: Given the confounding factors affecting feedback mentioned above, we train the model on pairs of samples (c, r+) and (c, r−), rather than fitting it to score each dialogue individually. The model is trained in such a way that predicts a higher score for a better response than the less appropriate response.
+
+Model ensemble
+
+For machine generation: The machine generation is required to be both human-like and preferred by a human. To rank the machine generations, the authors took the probability of joint distributions as follows :
+
+P(r = preferred, human-like|c) = P(r = preferred|r = human-like, c)· P(r = human-like|c)
+
+Human calibration: To estimate the correlation between the feedback score and human responses preferences, pair of responses for the same context to a set of human annotators, asking them to select the response they would prefer to send or receive.
+
+Model and training
+
+The model is a 12-layer transformer model based on GPT-2 architecture and initialized with DialoGPTmedium model weights. DialoGPT is a large-scale dialogue response generation model, pre-trained on 147M Reddit conversations.
+
+Each model ( for up-down, width, depth, human vs rand) has 354.8M parameters and is trained on an Nvidia Tesla V100 4-core GPU with batch size 256 at an average training speed of 0.33 M pairs of samples per hour. Each model took around 70 hours to converge (until validation loss on a fixed set of 1024 samples ceased to improve).
+
+Findings
+
+Responses that receive fewer replies or upvotes tend to be less contentful.
+
+In contrast, comments that attract more feedback are typically different in character: for instance, questions (indicated by ?, why, how, what, who) often lead to a longer conversation (greater Depth).
+
+The model trained only on Width data can perform reasonably well on Depth prediction, and vice versa, consistent with the high correlation between their labels. The Updown label is less correlated with these, and so the model trained on Updown data performs poorly on Width and Depth data. This is in keeping with the complementary relationship between these models.
+
+In the human-vs-generated task, the authors evaluate the model’s ability to discriminate between human and generated responses. A model trained only on human-vs-rand data performs poorly on this task, indicating that the generated responses are sufficiently relevant to the context to yield a higher score than a random response. However, the feedback prediction models, Width, Depth and Updown show much higher accuracy in the human-vs-generated task, even though they were not trained on any generated responses. This implies that the ranking models (DialogRPT’s) predict that DialoGPT’s(another generative model by Microsoft) generated responses may not be as proactive or as engaging as human responses.
+
+Conclusion
+
+To sum up the whole paper, Authors tried to use Reddit human feedback data to build and release a large-scale training dataset for feedback prediction. Then they trained the GPT-2 based model on 133M pairs of human feedback data and demonstrate the trained model a.k.a DialogRPT outperforms several baselines. Human evaluation of machine-generated responses ranked by DialogRPT shows higher human preferences.
+
+For future work, this model can be integrated with the generation model (maybe in Reinforcement learning)using the ranking score by DialogRPT as a reward signal.
+
+Python Demo
+
+Install Libraries
+
+!git clone https://github.com/huggingface/transformers.git %cd transformers !pip install -e . %cd src
+
+Implementation for various task
+
+Task: For upvotes/likes prediction
+
+The updown the score predicts how likely the response is getting upvoted.
+
+Output :
+
+Score Response 0.125 Me too!
+
+0.640 Here’s a free textbook (URL) in case anyone needs it.
+
+Task: Human vs Machine
+
+The human_vs_machine the score predicts how likely the response is from a human rather than a machine.
+
+Output :
+
+Score Response 0.000 I'm not sure if it's a good idea.
+
+0.419 Me too!
+
+Task: Human vs Random
+
+The human_vs_rand the score predicts how likely the response is corresponding to the given context, rather than a random response.
+
+Output :

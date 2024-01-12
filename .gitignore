@@ -1,0 +1,8 @@
+.DS_Store
+.vscode/
+*.joblib
+model_20k/
+model_100k/
+database/text_and_tags_20k.tsv
+database/text_and_tags_100k.tsv
+corpus.tsv
